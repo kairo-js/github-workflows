@@ -1,0 +1,82 @@
+name: Minecraft Pack Release
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Release artifact name prefix, without the tag suffix.
+        required: true
+        type: string
+      node-version:
+        description: Node.js version used to build the pack.
+        required: false
+        type: string
+        default: "22"
+      install-command:
+        description: Dependency install command.
+        required: false
+        type: string
+        default: pnpm install --frozen-lockfile
+      build-command:
+        description: Pack build command.
+        required: false
+        type: string
+        default: pnpm run build:ci
+      generate-release-notes:
+        description: Whether GitHub should generate release notes.
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Create release artifacts
+        run: |
+          NAME="${{ inputs.artifact-name }}-${{ github.ref_name }}"
+          cd BP && zip -r "../${NAME}-BP.zip" . && cd ..
+          cd RP && zip -r "../${NAME}-RP.zip" . && cd ..
+          zip "${NAME}.zip" "${NAME}-BP.zip" "${NAME}-RP.zip"
+          cp "${NAME}-BP.zip" "${NAME}-BP.mcpack"
+          cp "${NAME}-RP.zip" "${NAME}-RP.mcpack"
+          zip "${NAME}.mcaddon" "${NAME}-BP.mcpack" "${NAME}-RP.mcpack"
+
+      - name: Detect prerelease
+        id: prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-"* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          generate_release_notes: ${{ inputs.generate-release-notes }}
+          files: |
+            ${{ inputs.artifact-name }}-${{ github.ref_name }}.mcaddon
+            ${{ inputs.artifact-name }}-${{ github.ref_name }}.zip

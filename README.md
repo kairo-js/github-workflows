@@ -95,11 +95,11 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
-      GDRIVE_DESTINATION: ${{ secrets.GDRIVE_DESTINATION }}
+      BACKUP_GDRIVE_DESTINATION: ${{ secrets.PROD_GDRIVE_DESTINATION }}
 ```
 
 `RCLONE_CONFIG` must contain a full `rclone.conf` with a remote named `gdrive` (OAuth-authorized; service accounts can't write to a personal Drive due to `storageQuotaExceeded`).
-`GDRIVE_DESTINATION` is the repository-specific path under that remote, e.g. `minecraft/werewolf/server/backups`.
+`BACKUP_GDRIVE_DESTINATION` is the repository-specific path under that remote, e.g. `minecraft/werewolf/server/prod/backups`. Callers can map this from environment-specific secrets such as `PROD_GDRIVE_DESTINATION` or `DEV_GDRIVE_DESTINATION`.
 Set `skip-if-missing: true` for pre-deploy backups that should pass on the first deploy before the prod database exists.
 
 ## Minecraft pack release

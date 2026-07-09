@@ -41,8 +41,8 @@ on:
       gdrive-destination:
         description: >
           rclone destination path under the "gdrive" remote, e.g.
-          minecraft/werewolf/server/backups. Deprecated for repository-specific
-          configuration: prefer the GDRIVE_DESTINATION secret.
+          minecraft/werewolf/server/backups. Deprecated: prefer the
+          BACKUP_GDRIVE_DESTINATION secret.
         required: false
         type: string
         default: ""
@@ -68,7 +68,7 @@ on:
         required: true
       RCLONE_CONFIG:
         required: true
-      GDRIVE_DESTINATION:
+      BACKUP_GDRIVE_DESTINATION:
         required: false
 
 permissions:
@@ -140,19 +140,19 @@ jobs:
         if: ${{ steps.dump.outputs.skipped != 'true' }}
         env:
           RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
-          GDRIVE_DESTINATION_SECRET: ${{ secrets.GDRIVE_DESTINATION }}
-          GDRIVE_DESTINATION_INPUT: ${{ inputs.gdrive-destination }}
+          BACKUP_GDRIVE_DESTINATION_SECRET: ${{ secrets.BACKUP_GDRIVE_DESTINATION }}
+          BACKUP_GDRIVE_DESTINATION_INPUT: ${{ inputs.gdrive-destination }}
         run: |
           set -eu
-          GDRIVE_DESTINATION="$GDRIVE_DESTINATION_SECRET"
-          if [ -z "$GDRIVE_DESTINATION" ]; then
-            GDRIVE_DESTINATION="$GDRIVE_DESTINATION_INPUT"
+          BACKUP_GDRIVE_DESTINATION="$BACKUP_GDRIVE_DESTINATION_SECRET"
+          if [ -z "$BACKUP_GDRIVE_DESTINATION" ]; then
+            BACKUP_GDRIVE_DESTINATION="$BACKUP_GDRIVE_DESTINATION_INPUT"
           fi
-          if [ -z "$GDRIVE_DESTINATION" ]; then
-            echo "Either the GDRIVE_DESTINATION secret or gdrive-destination input must be set." >&2
+          if [ -z "$BACKUP_GDRIVE_DESTINATION" ]; then
+            echo "Either the BACKUP_GDRIVE_DESTINATION secret or gdrive-destination input must be set." >&2
             exit 1
           fi
           curl -fsSL https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
-          rclone copy "$FILENAME" "gdrive:$GDRIVE_DESTINATION" --progress
+          rclone copy "$FILENAME" "gdrive:$BACKUP_GDRIVE_DESTINATION" --progress

@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.4
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.4
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -56,7 +56,7 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.4
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
@@ -82,7 +82,7 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.4
     with:
       app-name: werewolf
       deploy-env-name: prod
@@ -110,7 +110,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.4
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -153,7 +153,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.3
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.4
     permissions:
       contents: write
     with:

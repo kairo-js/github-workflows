@@ -166,7 +166,7 @@ jobs:
     needs: deploy-proxy-body
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ inputs.snippet-template-path != '' }}
 
       - name: Render snippet to a local file

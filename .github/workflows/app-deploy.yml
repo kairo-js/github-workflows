@@ -88,7 +88,7 @@ jobs:
       POSTGRES_DB: ${{ inputs.postgres-db }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Copy deploy compose file to server
         uses: appleboy/scp-action@v0.1.7

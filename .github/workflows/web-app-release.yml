@@ -89,7 +89,7 @@ jobs:
 
   build-and-push:
     needs: vars
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.1
     with:
       services: ${{ inputs.services }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -101,7 +101,7 @@ jobs:
   pre-prod-backup:
     needs: [vars, build-and-push]
     if: ${{ needs.vars.outputs.deploy-env-name == 'prod' }}
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.1
     with:
       app-name: ${{ inputs.app-name }}
       deploy-env-name: prod
@@ -120,7 +120,7 @@ jobs:
   deploy-dev:
     needs: [vars, build-and-push]
     if: ${{ needs.vars.outputs.deploy-env-name == 'dev' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.1
     with:
       app-name: ${{ inputs.app-name }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -140,7 +140,7 @@ jobs:
   deploy-prod:
     needs: [vars, build-and-push, pre-prod-backup]
     if: ${{ needs.vars.outputs.deploy-env-name == 'prod' && needs.pre-prod-backup.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.1
     with:
       app-name: ${{ inputs.app-name }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -160,7 +160,7 @@ jobs:
   deploy-caddy-dev:
     needs: deploy-dev
     if: ${{ needs.deploy-dev.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.1
     with:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}
@@ -177,7 +177,7 @@ jobs:
   deploy-caddy-prod:
     needs: deploy-prod
     if: ${{ needs.deploy-prod.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@main
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.1
     with:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}

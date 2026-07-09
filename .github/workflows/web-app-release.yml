@@ -28,6 +28,14 @@ on:
       prod-backup-prefix:
         required: true
         type: string
+      prod-backup-gdrive-suffix:
+        description: >
+          Child folder under PROD_GDRIVE_DESTINATION for pre-prod-deploy backups.
+          Defaults to "versions" because these dumps represent the data state
+          before deploying a version tag.
+        required: false
+        type: string
+        default: versions
       compose-path:
         required: false
         type: string
@@ -109,6 +117,7 @@ jobs:
       db-user: ${{ inputs.postgres-user }}
       db-name: ${{ inputs.postgres-db }}
       backup-prefix: ${{ inputs.prod-backup-prefix }}
+      gdrive-destination-suffix: ${{ inputs.prod-backup-gdrive-suffix }}
       skip-if-missing: true
     secrets:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}

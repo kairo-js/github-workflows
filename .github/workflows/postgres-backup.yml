@@ -1,0 +1,80 @@
+name: PostgreSQL Backup
+
+on:
+  workflow_call:
+    inputs:
+      container-name:
+        description: Name of the running postgres container to pg_dump from, over SSH.
+        required: true
+        type: string
+      db-user:
+        required: true
+        type: string
+      db-name:
+        required: true
+        type: string
+      backup-prefix:
+        description: >
+          Prefix used for the dump filename, e.g. "werewolf-prod" ->
+          werewolf-prod-20260101T000000Z.dump.
+        required: true
+        type: string
+      gdrive-destination:
+        description: rclone destination path under the "gdrive" remote, e.g. minecraft/werewolf/server/backups.
+        required: true
+        type: string
+      retention-days:
+        description: Retention (in days) for the GitHub Actions artifact copy.
+        required: false
+        type: number
+        default: 30
+    secrets:
+      DEPLOY_HOST:
+        required: true
+      DEPLOY_USER:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      RCLONE_CONFIG:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Dump PostgreSQL over SSH
+        run: |
+          set -eu
+          FILENAME="${{ inputs.backup-prefix }}-$(date +%Y%m%dT%H%M%SZ).dump"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "docker exec ${{ inputs.container-name }} pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}" > "$FILENAME"
+          echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
+          ls -lh "$FILENAME"
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILENAME }}
+          path: ${{ env.FILENAME }}
+          retention-days: ${{ inputs.retention-days }}
+
+      - name: Upload backup to Google Drive
+        env:
+          RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set -eu
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          mkdir -p ~/.config/rclone
+          printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
+          rclone copy "$FILENAME" "gdrive:${{ inputs.gdrive-destination }}" --progress

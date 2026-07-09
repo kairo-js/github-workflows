@@ -46,6 +46,13 @@ on:
         required: false
         type: string
         default: ""
+      gdrive-destination-suffix:
+        description: >
+          Optional child path appended to the Google Drive destination, e.g.
+          "daily" uploads to "<BACKUP_GDRIVE_DESTINATION>/daily".
+        required: false
+        type: string
+        default: ""
       retention-days:
         description: Retention (in days) for the GitHub Actions artifact copy.
         required: false
@@ -142,6 +149,7 @@ jobs:
           RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
           BACKUP_GDRIVE_DESTINATION_SECRET: ${{ secrets.BACKUP_GDRIVE_DESTINATION }}
           BACKUP_GDRIVE_DESTINATION_INPUT: ${{ inputs.gdrive-destination }}
+          BACKUP_GDRIVE_DESTINATION_SUFFIX: ${{ inputs.gdrive-destination-suffix }}
         run: |
           set -eu
           BACKUP_GDRIVE_DESTINATION="$BACKUP_GDRIVE_DESTINATION_SECRET"
@@ -151,6 +159,12 @@ jobs:
           if [ -z "$BACKUP_GDRIVE_DESTINATION" ]; then
             echo "Either the BACKUP_GDRIVE_DESTINATION secret or gdrive-destination input must be set." >&2
             exit 1
+          fi
+          BACKUP_GDRIVE_DESTINATION="${BACKUP_GDRIVE_DESTINATION%/}"
+          BACKUP_GDRIVE_DESTINATION_SUFFIX="${BACKUP_GDRIVE_DESTINATION_SUFFIX#/}"
+          BACKUP_GDRIVE_DESTINATION_SUFFIX="${BACKUP_GDRIVE_DESTINATION_SUFFIX%/}"
+          if [ -n "$BACKUP_GDRIVE_DESTINATION_SUFFIX" ]; then
+            BACKUP_GDRIVE_DESTINATION="$BACKUP_GDRIVE_DESTINATION/$BACKUP_GDRIVE_DESTINATION_SUFFIX"
           fi
           curl -fsSL https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone

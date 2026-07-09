@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.3
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.3
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -56,7 +56,7 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.3
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
@@ -82,13 +82,14 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.3
     with:
       app-name: werewolf
       deploy-env-name: prod
       db-user: werewolf
       db-name: werewolf
       backup-prefix: werewolf-prod
+      gdrive-destination-suffix: daily
       skip-if-missing: true
     secrets:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -99,7 +100,7 @@ jobs:
 ```
 
 `RCLONE_CONFIG` must contain a full `rclone.conf` with a remote named `gdrive` (OAuth-authorized; service accounts can't write to a personal Drive due to `storageQuotaExceeded`).
-`BACKUP_GDRIVE_DESTINATION` is the repository-specific path under that remote, e.g. `minecraft/werewolf/server/prod/backups`. Callers can map this from environment-specific secrets such as `PROD_GDRIVE_DESTINATION` or `DEV_GDRIVE_DESTINATION`.
+`BACKUP_GDRIVE_DESTINATION` is the repository-specific path under that remote, e.g. `minecraft/werewolf/server/prod/backups`. Callers can map this from environment-specific secrets such as `PROD_GDRIVE_DESTINATION` or `DEV_GDRIVE_DESTINATION`. Set `gdrive-destination-suffix: daily` to upload into a child folder such as `minecraft/werewolf/server/prod/backups/daily`.
 Set `skip-if-missing: true` for pre-deploy backups that should pass on the first deploy before the prod database exists.
 
 ## Web app release
@@ -109,7 +110,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.3
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -152,7 +153,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.2
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.3
     permissions:
       contents: write
     with:

@@ -58,6 +58,13 @@ on:
         required: false
         type: number
         default: 30
+      gdrive-retention-days:
+        description: >
+          Retention (in days) for Google Drive backup files in the resolved
+          destination folder. Set 0 to disable Google Drive deletion.
+        required: false
+        type: number
+        default: 0
       skip-if-missing:
         description: >
           If true, exit successfully without uploading anything when the target
@@ -170,3 +177,9 @@ jobs:
           mkdir -p ~/.config/rclone
           printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
           rclone copy "$FILENAME" "gdrive:$BACKUP_GDRIVE_DESTINATION" --progress
+          if [ "${{ inputs.gdrive-retention-days }}" -gt 0 ]; then
+            rclone delete "gdrive:$BACKUP_GDRIVE_DESTINATION" \
+              --min-age "${{ inputs.gdrive-retention-days }}d" \
+              --include "*.dump" \
+              --progress
+          fi

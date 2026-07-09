@@ -102,6 +102,42 @@ jobs:
 `BACKUP_GDRIVE_DESTINATION` is the repository-specific path under that remote, e.g. `minecraft/werewolf/server/prod/backups`. Callers can map this from environment-specific secrets such as `PROD_GDRIVE_DESTINATION` or `DEV_GDRIVE_DESTINATION`.
 Set `skip-if-missing: true` for pre-deploy backups that should pass on the first deploy before the prod database exists.
 
+## Web app release
+
+Use `.github/workflows/web-app-release.yml` when an app should use the standard full release flow: build Docker images, back up prod before tag deploys, deploy the app stack, and deploy/reload the shared Caddy snippet.
+
+```yaml
+jobs:
+  release:
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@main
+    with:
+      app-name: werewolf
+      image-prefix: mc-werewolf
+      services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
+      postgres-user: werewolf
+      postgres-db: werewolf
+      caddy-snippet-template-path: deploy/caddy/service.caddy
+      acme-email: ${{ vars.ACME_EMAIL }}
+      prod-backup-prefix: werewolf-prod-before-deploy
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEV_POSTGRES_PASSWORD: ${{ secrets.DEV_POSTGRES_PASSWORD }}
+      PROD_POSTGRES_PASSWORD: ${{ secrets.PROD_POSTGRES_PASSWORD }}
+      PROXY_HOST: ${{ secrets.PROXY_HOST }}
+      PROXY_USER: ${{ secrets.PROXY_USER }}
+      PROXY_SSH_KEY: ${{ secrets.PROXY_SSH_KEY }}
+      RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+      PROD_GDRIVE_DESTINATION: ${{ secrets.PROD_GDRIVE_DESTINATION }}
+      BASIC_AUTH_DEV_USER: ${{ secrets.BASIC_AUTH_DEV_USER }}
+      BASIC_AUTH_DEV_HASH: ${{ secrets.BASIC_AUTH_DEV_HASH }}
+      BASIC_AUTH_ADMIN_USER: ${{ secrets.BASIC_AUTH_ADMIN_USER }}
+      BASIC_AUTH_ADMIN_HASH: ${{ secrets.BASIC_AUTH_ADMIN_HASH }}
+```
+
 ## Minecraft pack release
 
 Use `.github/workflows/minecraft-pack-release.yml` from a pack repository to build `BP` and `RP`, publish a Minecraft-friendly `.mcaddon`, and publish a `.zip` whose contents are `*-BP.zip` and `*-RP.zip`.

@@ -4,9 +4,28 @@ on:
   workflow_call:
     inputs:
       container-name:
-        description: Name of the running postgres container to pg_dump from, over SSH.
-        required: true
+        description: >
+          Name of the running postgres container to pg_dump from, over SSH.
+          Deprecated: prefer app-name + deploy-env-name so this workflow does not
+          depend on Docker Compose's generated container names.
+        required: false
         type: string
+        default: ""
+      app-name:
+        description: Short app identifier used for /opt/<app-name>/<deploy-env-name>.
+        required: false
+        type: string
+        default: ""
+      deploy-env-name:
+        description: Deployment environment name, e.g. "prod".
+        required: false
+        type: string
+        default: ""
+      compose-path:
+        description: Path to docker-compose.yml relative to /opt/<app-name>/<deploy-env-name>.
+        required: false
+        type: string
+        default: docker-compose.yml
       db-user:
         required: true
         type: string
@@ -20,14 +39,26 @@ on:
         required: true
         type: string
       gdrive-destination:
-        description: rclone destination path under the "gdrive" remote, e.g. minecraft/werewolf/server/backups.
-        required: true
+        description: >
+          rclone destination path under the "gdrive" remote, e.g.
+          minecraft/werewolf/server/backups. Deprecated for repository-specific
+          configuration: prefer the GDRIVE_DESTINATION secret.
+        required: false
         type: string
+        default: ""
       retention-days:
         description: Retention (in days) for the GitHub Actions artifact copy.
         required: false
         type: number
         default: 30
+      skip-if-missing:
+        description: >
+          If true, exit successfully without uploading anything when the target
+          compose directory/container is missing. Useful before the first prod
+          deploy, where there is not yet any database to back up.
+        required: false
+        type: boolean
+        default: false
     secrets:
       DEPLOY_HOST:
         required: true
@@ -37,6 +68,8 @@ on:
         required: true
       RCLONE_CONFIG:
         required: true
+      GDRIVE_DESTINATION:
+        required: false
 
 permissions:
   contents: read
@@ -44,6 +77,8 @@ permissions:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    outputs:
+      skipped: ${{ steps.dump.outputs.skipped }}
     steps:
       - name: Set up SSH key
         run: |
@@ -53,16 +88,48 @@ jobs:
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Dump PostgreSQL over SSH
+        id: dump
         run: |
           set -eu
           FILENAME="${{ inputs.backup-prefix }}-$(date +%Y%m%dT%H%M%SZ).dump"
+          if [ -n "${{ inputs.app-name }}" ] && [ -n "${{ inputs.deploy-env-name }}" ]; then
+            if [ "${{ inputs.skip-if-missing }}" = "true" ]; then
+              REMOTE_CMD='if [ ! -f "/opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }}/${{ inputs.compose-path }}" ]; then exit 42; fi; cd /opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }} && docker compose -p ${{ inputs.app-name }}-${{ inputs.deploy-env-name }} -f ${{ inputs.compose-path }} exec -T postgres pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}'
+            else
+              REMOTE_CMD="cd /opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }} && docker compose -p ${{ inputs.app-name }}-${{ inputs.deploy-env-name }} -f ${{ inputs.compose-path }} exec -T postgres pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}"
+            fi
+          elif [ -n "${{ inputs.container-name }}" ]; then
+            if [ "${{ inputs.skip-if-missing }}" = "true" ]; then
+              REMOTE_CMD='docker inspect ${{ inputs.container-name }} >/dev/null 2>&1 || exit 42; docker exec ${{ inputs.container-name }} pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}'
+            else
+              REMOTE_CMD="docker exec ${{ inputs.container-name }} pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}"
+            fi
+          else
+            echo "Either app-name + deploy-env-name or container-name must be set." >&2
+            exit 1
+          fi
+          set +e
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "docker exec ${{ inputs.container-name }} pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}" > "$FILENAME"
+            "$REMOTE_CMD" > "$FILENAME"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -eq 42 ] && [ "${{ inputs.skip-if-missing }}" = "true" ]; then
+            rm -f "$FILENAME"
+            echo "No existing database found; skipping backup."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$STATUS" -ne 0 ]; then
+            rm -f "$FILENAME"
+            exit "$STATUS"
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
           ls -lh "$FILENAME"
 
       - name: Upload backup as artifact
+        if: ${{ steps.dump.outputs.skipped != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.FILENAME }}
@@ -70,11 +137,22 @@ jobs:
           retention-days: ${{ inputs.retention-days }}
 
       - name: Upload backup to Google Drive
+        if: ${{ steps.dump.outputs.skipped != 'true' }}
         env:
           RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
+          GDRIVE_DESTINATION_SECRET: ${{ secrets.GDRIVE_DESTINATION }}
+          GDRIVE_DESTINATION_INPUT: ${{ inputs.gdrive-destination }}
         run: |
           set -eu
+          GDRIVE_DESTINATION="$GDRIVE_DESTINATION_SECRET"
+          if [ -z "$GDRIVE_DESTINATION" ]; then
+            GDRIVE_DESTINATION="$GDRIVE_DESTINATION_INPUT"
+          fi
+          if [ -z "$GDRIVE_DESTINATION" ]; then
+            echo "Either the GDRIVE_DESTINATION secret or gdrive-destination input must be set." >&2
+            exit 1
+          fi
           curl -fsSL https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
-          rclone copy "$FILENAME" "gdrive:${{ inputs.gdrive-destination }}" --progress
+          rclone copy "$FILENAME" "gdrive:$GDRIVE_DESTINATION" --progress

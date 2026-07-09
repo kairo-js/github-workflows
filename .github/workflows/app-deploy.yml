@@ -1,0 +1,131 @@
+name: App Deploy
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: >
+          Short app identifier, e.g. "werewolf". Used for the /opt/<app-name>/<deploy-env-name>
+          directory on the host and as a prefix for the docker compose project name
+          (<app-name>-<deploy-env-name>), so multiple apps can share one host without
+          container/network name collisions.
+        required: true
+        type: string
+      image-prefix:
+        description: Docker Hub repository prefix, e.g. "mc-werewolf" -> mc-werewolf-backend.
+        required: true
+        type: string
+      deploy-env-name:
+        description: Deployment environment name, e.g. "dev" or "prod".
+        required: true
+        type: string
+      image-tag:
+        description: Tag of the images to deploy (must already be pushed to Docker Hub).
+        required: true
+        type: string
+      app-env:
+        description: Value passed to the app as APP_ENV.
+        required: true
+        type: string
+      backend-port:
+        required: false
+        type: string
+        default: ""
+      frontend-port:
+        required: false
+        type: string
+        default: ""
+      postgres-port:
+        required: false
+        type: string
+        default: ""
+      postgres-user:
+        required: true
+        type: string
+      postgres-db:
+        required: true
+        type: string
+      compose-path:
+        description: >
+          Path (within the calling repo) to the deploy docker-compose.yml. If any
+          service in it needs to be reachable from the shared Caddy proxy (see
+          caddy-snippet-deploy.yml), that service must join the external "proxy"
+          docker network in addition to its own default network -- this workflow
+          ensures that network exists (creating it if needed) before `up`, but does
+          not itself attach any service to it.
+        required: false
+        type: string
+        default: deploy/docker-compose.yml
+    secrets:
+      DEPLOY_HOST:
+        required: true
+      DEPLOY_USER:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+      POSTGRES_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      IMAGE_PREFIX: ${{ inputs.image-prefix }}
+      DEPLOY_ENV_NAME: ${{ inputs.deploy-env-name }}
+      IMAGE_TAG: ${{ inputs.image-tag }}
+      APP_ENV: ${{ inputs.app-env }}
+      BACKEND_PORT: ${{ inputs.backend-port }}
+      FRONTEND_PORT: ${{ inputs.frontend-port }}
+      POSTGRES_PORT: ${{ inputs.postgres-port }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      POSTGRES_USER: ${{ inputs.postgres-user }}
+      POSTGRES_DB: ${{ inputs.postgres-db }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy deploy compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: ${{ inputs.compose-path }}
+          target: "/opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }}"
+          strip_components: 1
+
+      - name: Write env file and (re)deploy stack
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APP_NAME,IMAGE_PREFIX,DEPLOY_ENV_NAME,IMAGE_TAG,APP_ENV,BACKEND_PORT,FRONTEND_PORT,POSTGRES_PORT,DOCKERHUB_USERNAME,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD
+          script: |
+            set -eu
+            DIR="/opt/$APP_NAME/$DEPLOY_ENV_NAME"
+            mkdir -p "$DIR"
+            cat > "$DIR/.env" <<EOF
+            APP_NAME=$APP_NAME
+            IMAGE_PREFIX=$IMAGE_PREFIX
+            DEPLOY_ENV_NAME=$DEPLOY_ENV_NAME
+            DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
+            IMAGE_TAG=$IMAGE_TAG
+            APP_ENV=$APP_ENV
+            BACKEND_PORT=$BACKEND_PORT
+            FRONTEND_PORT=$FRONTEND_PORT
+            POSTGRES_PORT=$POSTGRES_PORT
+            POSTGRES_USER=$POSTGRES_USER
+            POSTGRES_DB=$POSTGRES_DB
+            POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+            EOF
+            docker network create proxy 2>/dev/null || true
+            cd "$DIR"
+            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env pull
+            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env up -d --wait --wait-timeout 90

@@ -1,0 +1,209 @@
+name: Caddy Snippet Deploy
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: >
+          Short app identifier, e.g. "werewolf". The snippet is written as
+          <remote-dir>/<app-name>.caddy on the proxy host. Caddy itself has no
+          knowledge of app names beyond this filename -- it only imports
+          whatever *.caddy files exist in conf.d.
+        required: true
+        type: string
+      snippet-content:
+        description: >
+          Fully rendered contents of the Caddy snippet. Any secret placeholders
+          (e.g. basic_auth credentials) must already be substituted by the calling
+          workflow before this is invoked. Prefer snippet-template-path for snippets
+          that contain supported secrets.
+        required: false
+        type: string
+        default: ""
+      snippet-template-path:
+        description: >
+          Path (within the calling repo) to a Caddy snippet template. If set, this
+          workflow checks out the caller repo and renders the file with envsubst
+          using the optional BASIC_AUTH_* secrets below, instead of using
+          snippet-content. Prefer this for snippets that contain secrets because it
+          avoids passing rendered secrets through job outputs.
+        required: false
+        type: string
+        default: ""
+      acme-email:
+        description: >
+          Email used for the shared Caddy instance's ACME (Let's Encrypt) account.
+          Not a secret. All callers sharing one proxy host should pass the same value.
+        required: true
+        type: string
+      remote-dir:
+        description: Host directory, bind-mounted into the Caddy container's conf.d, to write the snippet into.
+        required: false
+        type: string
+        default: /opt/proxy/conf.d
+      container-conf-dir:
+        description: Path corresponding to remote-dir as seen from inside the Caddy container.
+        required: false
+        type: string
+        default: /etc/caddy/conf.d
+      caddy-container:
+        description: Name of the Caddy container.
+        required: false
+        type: string
+        default: proxy-caddy
+      caddyfile-path:
+        description: Path to the main Caddyfile as seen from inside the Caddy container.
+        required: false
+        type: string
+        default: /etc/caddy/Caddyfile
+    secrets:
+      PROXY_HOST:
+        required: true
+      PROXY_USER:
+        required: true
+      PROXY_SSH_KEY:
+        required: true
+      BASIC_AUTH_DEV_USER:
+        required: false
+      BASIC_AUTH_DEV_HASH:
+        required: false
+      BASIC_AUTH_ADMIN_USER:
+        required: false
+      BASIC_AUTH_ADMIN_HASH:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Ensures the shared Caddy proxy body (the container itself, not any app's
+  # routing) exists and is up to date. Fully self-contained: the compose file
+  # and Caddyfile are generated here rather than pulled from another repo, so
+  # this workflow has no cross-repo checkout dependency and no knowledge of
+  # which apps exist -- apps join the well-known "proxy" docker network on
+  # their own, and Caddy only ever references that one generic network name.
+  # Idempotent: safe to run on every deploy of every app sharing this host.
+  deploy-proxy-body:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate proxy body files
+        run: |
+          mkdir -p proxy-body
+          cat > proxy-body/docker-compose.yml <<'EOF'
+          services:
+            caddy:
+              image: caddy:2-alpine
+              container_name: proxy-caddy
+              environment:
+                ACME_EMAIL: ${ACME_EMAIL}
+              ports:
+                - "80:80"
+                - "443:443"
+              volumes:
+                - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                - ./conf.d:/etc/caddy/conf.d
+                - caddy_data:/data
+                - caddy_config:/config
+              networks:
+                - proxy
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:2019/config/"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+                start_period: 10s
+
+          networks:
+            proxy:
+              external: true
+              name: proxy
+
+          volumes:
+            caddy_data:
+            caddy_config:
+          EOF
+          cat > proxy-body/Caddyfile <<'EOF'
+          {
+          	email {$ACME_EMAIL}
+          }
+
+          import /etc/caddy/conf.d/*.caddy
+          EOF
+
+      - name: Copy proxy body to proxy host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          source: "proxy-body/docker-compose.yml,proxy-body/Caddyfile"
+          target: "/opt/proxy"
+          strip_components: 1
+
+      - name: Ensure proxy network and (re)deploy proxy body
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          envs: ACME_EMAIL
+          script: |
+            set -eu
+            docker network create proxy 2>/dev/null || true
+            DIR="/opt/proxy"
+            mkdir -p "$DIR/conf.d"
+            cat > "$DIR/.env" <<ENVEOF
+            ACME_EMAIL=$ACME_EMAIL
+            ENVEOF
+            cd "$DIR"
+            docker compose -p proxy --env-file .env pull
+            docker compose -p proxy --env-file .env up -d --wait --wait-timeout 60
+        env:
+          ACME_EMAIL: ${{ inputs.acme-email }}
+
+  deploy-snippet:
+    needs: deploy-proxy-body
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ inputs.snippet-template-path != '' }}
+
+      - name: Render snippet to a local file
+        env:
+          SNIPPET_CONTENT: ${{ inputs.snippet-content }}
+          SNIPPET_TEMPLATE_PATH: ${{ inputs.snippet-template-path }}
+          BASIC_AUTH_DEV_USER: ${{ secrets.BASIC_AUTH_DEV_USER }}
+          BASIC_AUTH_DEV_HASH: ${{ secrets.BASIC_AUTH_DEV_HASH }}
+          BASIC_AUTH_ADMIN_USER: ${{ secrets.BASIC_AUTH_ADMIN_USER }}
+          BASIC_AUTH_ADMIN_HASH: ${{ secrets.BASIC_AUTH_ADMIN_HASH }}
+        run: |
+          set -eu
+          if [ -n "$SNIPPET_TEMPLATE_PATH" ]; then
+            envsubst < "$SNIPPET_TEMPLATE_PATH" > "${{ inputs.app-name }}.caddy"
+          elif [ -n "$SNIPPET_CONTENT" ]; then
+            printf '%s\n' "$SNIPPET_CONTENT" > "${{ inputs.app-name }}.caddy"
+          else
+            echo "Either snippet-template-path or snippet-content must be set." >&2
+            exit 1
+          fi
+
+      - name: Copy Caddy snippet to proxy host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          source: "${{ inputs.app-name }}.caddy"
+          target: ${{ inputs.remote-dir }}
+
+      - name: Format and reload Caddy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          script: |
+            set -eu
+            docker exec "${{ inputs.caddy-container }}" caddy fmt --overwrite "${{ inputs.container-conf-dir }}/${{ inputs.app-name }}.caddy"
+            docker exec "${{ inputs.caddy-container }}" caddy reload --config "${{ inputs.caddyfile-path }}"

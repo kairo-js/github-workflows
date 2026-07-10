@@ -197,7 +197,7 @@ jobs:
           source: "${{ inputs.app-name }}.caddy"
           target: ${{ inputs.remote-dir }}
 
-      - name: Format and reload Caddy
+      - name: Format, validate, and reload Caddy
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.PROXY_HOST }}
@@ -206,4 +206,5 @@ jobs:
           script: |
             set -eu
             docker exec "${{ inputs.caddy-container }}" caddy fmt --overwrite "${{ inputs.container-conf-dir }}/${{ inputs.app-name }}.caddy"
+            docker exec "${{ inputs.caddy-container }}" caddy validate --config "${{ inputs.caddyfile-path }}"
             docker exec "${{ inputs.caddy-container }}" caddy reload --config "${{ inputs.caddyfile-path }}"

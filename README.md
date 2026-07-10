@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.2.0
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.0
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -56,7 +56,7 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.0
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
@@ -81,27 +81,48 @@ Templates can also use `DEV_BACKEND_UPSTREAM`, `DEV_FRONTEND_UPSTREAM`, `PROD_BA
 
 ## App undeploy
 
-Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host. It can remove the app's Caddy snippet, validate/reload Caddy, then run `docker compose down` for one or more deployment environments. `remove-volumes` defaults to `false`; set it to `true` only when the database volume should be deleted too.
+Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host. It can remove the app's Caddy snippet, validate/reload Caddy, then run `docker compose down` for one or more deployment environments. `remove-volumes` defaults to `false`; set it to `true` only when the database volume should be deleted too. `deploy-env-names` accepts multiple space-separated environments in one call **only when they share a host** -- this workflow itself only ever talks to one `DEPLOY_HOST`. If dev and prod are on different hosts, call it once per environment instead, each with its own `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`, and only pass `remove-caddy-snippet: true` on the call that should actually remove the shared snippet (typically gated so it only fires once, not on both calls).
 
 ```yaml
 jobs:
-  undeploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.1.10
+  undeploy-dev:
+    if: ${{ inputs.target == 'all' || inputs.target == 'dev' }}
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.0
     with:
       app-name: werewolf
-      deploy-env-names: dev prod
+      deploy-env-names: dev
       remove-volumes: false
       remove-app-dirs: true
-      remove-caddy-snippet: true
+      remove-caddy-snippet: false
       confirm: undeploy werewolf
     secrets:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEV_DEPLOY_SSH_KEY }}
+      PROXY_HOST: ${{ secrets.PROXY_HOST }}
+      PROXY_USER: ${{ secrets.PROXY_USER }}
+      PROXY_SSH_KEY: ${{ secrets.PROXY_SSH_KEY }}
+
+  undeploy-prod:
+    if: ${{ inputs.target == 'all' || inputs.target == 'prod' }}
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.0
+    with:
+      app-name: werewolf
+      deploy-env-names: prod
+      remove-volumes: false
+      remove-app-dirs: true
+      remove-caddy-snippet: ${{ inputs.target == 'all' }}
+      confirm: undeploy werewolf
+    secrets:
+      DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
       PROXY_HOST: ${{ secrets.PROXY_HOST }}
       PROXY_USER: ${{ secrets.PROXY_USER }}
       PROXY_SSH_KEY: ${{ secrets.PROXY_SSH_KEY }}
 ```
+
+If dev and prod are still co-located on one host, keep the original single-job form with `deploy-env-names: dev prod` and both `DEPLOY_HOST` secrets pointing at the same host.
 
 ## PostgreSQL backup
 
@@ -110,7 +131,7 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.2.0
     with:
       app-name: werewolf
       deploy-env-name: prod
@@ -139,7 +160,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.2.0
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -156,9 +177,12 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEV_DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+      DEV_DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
+      DEV_DEPLOY_SSH_KEY: ${{ secrets.DEV_DEPLOY_SSH_KEY }}
+      PROD_DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+      PROD_DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+      PROD_DEPLOY_SSH_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
       DEV_POSTGRES_PASSWORD: ${{ secrets.DEV_POSTGRES_PASSWORD }}
       PROD_POSTGRES_PASSWORD: ${{ secrets.PROD_POSTGRES_PASSWORD }}
       PROXY_HOST: ${{ secrets.PROXY_HOST }}
@@ -172,7 +196,9 @@ jobs:
       BASIC_AUTH_ADMIN_HASH: ${{ secrets.BASIC_AUTH_ADMIN_HASH }}
 ```
 
-When `dev-backend-port`, `dev-frontend-port`, `prod-backend-port`, or `prod-frontend-port` are set, app deploy adds a small Compose override that publishes the corresponding backend/frontend container port on the app host. Leave them empty for same-host Caddy via the Docker `proxy` network.
+`DEV_DEPLOY_*` and `PROD_DEPLOY_*` are separate secrets so dev and prod can live on different hosts. To keep them co-located on one host instead, just set both triples to the same `HOST`/`USER`/`SSH_KEY` values -- `app-deploy.yml`'s `/opt/<app-name>/<deploy-env-name>` directory and `<app-name>-<deploy-env-name>` compose project naming already avoid collisions either way.
+
+When `dev-backend-port`, `dev-frontend-port`, `prod-backend-port`, or `prod-frontend-port` are set, app deploy adds a small Compose override that publishes the corresponding backend/frontend container port on the app host. Leave them empty for same-host Caddy via the Docker `proxy` network. If dev and prod are on different hosts, also set `dev-backend-upstream`/`dev-frontend-upstream`/`prod-backend-upstream`/`prod-frontend-upstream` (see "Caddy snippet deploy" below) to `<host>:<port>` so the shared Caddy proxy can actually reach them -- the default upstreams (`<app-name>-dev-backend:8000`, etc.) only resolve when Caddy shares the same Docker `proxy` network as the app.
 
 ## Minecraft pack release
 
@@ -188,7 +214,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.10
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.2.0
     permissions:
       contents: write
     with:

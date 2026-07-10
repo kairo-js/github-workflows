@@ -77,11 +77,17 @@ on:
         required: true
       DOCKERHUB_TOKEN:
         required: true
-      DEPLOY_HOST:
+      DEV_DEPLOY_HOST:
         required: true
-      DEPLOY_USER:
+      DEV_DEPLOY_USER:
         required: true
-      DEPLOY_SSH_KEY:
+      DEV_DEPLOY_SSH_KEY:
+        required: true
+      PROD_DEPLOY_HOST:
+        required: true
+      PROD_DEPLOY_USER:
+        required: true
+      PROD_DEPLOY_SSH_KEY:
         required: true
       DEV_POSTGRES_PASSWORD:
         required: true
@@ -152,9 +158,9 @@ jobs:
       gdrive-destination-suffix: ${{ inputs.prod-backup-gdrive-suffix }}
       skip-if-missing: true
     secrets:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
       RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
       BACKUP_GDRIVE_DESTINATION: ${{ secrets.PROD_GDRIVE_DESTINATION }}
 
@@ -174,9 +180,9 @@ jobs:
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
     secrets:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEV_DEPLOY_SSH_KEY }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       POSTGRES_PASSWORD: ${{ secrets.DEV_POSTGRES_PASSWORD }}
 
@@ -196,9 +202,9 @@ jobs:
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
     secrets:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       POSTGRES_PASSWORD: ${{ secrets.PROD_POSTGRES_PASSWORD }}
 

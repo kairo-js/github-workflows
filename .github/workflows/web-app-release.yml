@@ -40,6 +40,38 @@ on:
         required: false
         type: string
         default: deploy/docker-compose.yml
+      dev-backend-upstream:
+        required: false
+        type: string
+        default: ""
+      dev-frontend-upstream:
+        required: false
+        type: string
+        default: ""
+      prod-backend-upstream:
+        required: false
+        type: string
+        default: ""
+      prod-frontend-upstream:
+        required: false
+        type: string
+        default: ""
+      dev-backend-port:
+        required: false
+        type: string
+        default: ""
+      dev-frontend-port:
+        required: false
+        type: string
+        default: ""
+      prod-backend-port:
+        required: false
+        type: string
+        default: ""
+      prod-frontend-port:
+        required: false
+        type: string
+        default: ""
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -136,6 +168,8 @@ jobs:
       deploy-env-name: dev
       image-tag: ${{ needs.vars.outputs.tag }}
       app-env: dev
+      backend-port: ${{ inputs.dev-backend-port }}
+      frontend-port: ${{ inputs.dev-frontend-port }}
       postgres-user: ${{ inputs.postgres-user }}
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
@@ -156,6 +190,8 @@ jobs:
       deploy-env-name: prod
       image-tag: ${{ needs.vars.outputs.tag }}
       app-env: prod
+      backend-port: ${{ inputs.prod-backend-port }}
+      frontend-port: ${{ inputs.prod-frontend-port }}
       postgres-user: ${{ inputs.postgres-user }}
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
@@ -174,6 +210,10 @@ jobs:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}
       acme-email: ${{ inputs.acme-email }}
+      dev-backend-upstream: ${{ inputs.dev-backend-upstream }}
+      dev-frontend-upstream: ${{ inputs.dev-frontend-upstream }}
+      prod-backend-upstream: ${{ inputs.prod-backend-upstream }}
+      prod-frontend-upstream: ${{ inputs.prod-frontend-upstream }}
     secrets:
       PROXY_HOST: ${{ secrets.PROXY_HOST }}
       PROXY_USER: ${{ secrets.PROXY_USER }}
@@ -191,6 +231,10 @@ jobs:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}
       acme-email: ${{ inputs.acme-email }}
+      dev-backend-upstream: ${{ inputs.dev-backend-upstream }}
+      dev-frontend-upstream: ${{ inputs.dev-frontend-upstream }}
+      prod-backend-upstream: ${{ inputs.prod-backend-upstream }}
+      prod-frontend-upstream: ${{ inputs.prod-frontend-upstream }}
     secrets:
       PROXY_HOST: ${{ secrets.PROXY_HOST }}
       PROXY_USER: ${{ secrets.PROXY_USER }}

@@ -56,6 +56,26 @@ on:
         required: false
         type: string
         default: /etc/caddy/Caddyfile
+      dev-backend-upstream:
+        description: Optional upstream used by templates as DEV_BACKEND_UPSTREAM.
+        required: false
+        type: string
+        default: ""
+      dev-frontend-upstream:
+        description: Optional upstream used by templates as DEV_FRONTEND_UPSTREAM.
+        required: false
+        type: string
+        default: ""
+      prod-backend-upstream:
+        description: Optional upstream used by templates as PROD_BACKEND_UPSTREAM.
+        required: false
+        type: string
+        default: ""
+      prod-frontend-upstream:
+        description: Optional upstream used by templates as PROD_FRONTEND_UPSTREAM.
+        required: false
+        type: string
+        default: ""
     secrets:
       PROXY_HOST:
         required: true
@@ -177,8 +197,17 @@ jobs:
           BASIC_AUTH_DEV_HASH: ${{ secrets.BASIC_AUTH_DEV_HASH }}
           BASIC_AUTH_ADMIN_USER: ${{ secrets.BASIC_AUTH_ADMIN_USER }}
           BASIC_AUTH_ADMIN_HASH: ${{ secrets.BASIC_AUTH_ADMIN_HASH }}
+          DEV_BACKEND_UPSTREAM_INPUT: ${{ inputs.dev-backend-upstream }}
+          DEV_FRONTEND_UPSTREAM_INPUT: ${{ inputs.dev-frontend-upstream }}
+          PROD_BACKEND_UPSTREAM_INPUT: ${{ inputs.prod-backend-upstream }}
+          PROD_FRONTEND_UPSTREAM_INPUT: ${{ inputs.prod-frontend-upstream }}
         run: |
           set -eu
+          DEV_BACKEND_UPSTREAM="${DEV_BACKEND_UPSTREAM_INPUT:-${{ inputs.app-name }}-dev-backend:8000}"
+          DEV_FRONTEND_UPSTREAM="${DEV_FRONTEND_UPSTREAM_INPUT:-${{ inputs.app-name }}-dev-frontend:3000}"
+          PROD_BACKEND_UPSTREAM="${PROD_BACKEND_UPSTREAM_INPUT:-${{ inputs.app-name }}-prod-backend:8000}"
+          PROD_FRONTEND_UPSTREAM="${PROD_FRONTEND_UPSTREAM_INPUT:-${{ inputs.app-name }}-prod-frontend:3000}"
+          export DEV_BACKEND_UPSTREAM DEV_FRONTEND_UPSTREAM PROD_BACKEND_UPSTREAM PROD_FRONTEND_UPSTREAM
           if [ -n "$SNIPPET_TEMPLATE_PATH" ]; then
             envsubst < "$SNIPPET_TEMPLATE_PATH" > "${{ inputs.app-name }}.caddy"
           elif [ -n "$SNIPPET_CONTENT" ]; then

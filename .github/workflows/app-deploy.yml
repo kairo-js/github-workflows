@@ -127,5 +127,26 @@ jobs:
             EOF
             docker network create proxy 2>/dev/null || true
             cd "$DIR"
-            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env pull
-            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env up -d --wait --wait-timeout 90
+            COMPOSE_FILES="-f docker-compose.yml"
+            if [ -n "$BACKEND_PORT" ] || [ -n "$FRONTEND_PORT" ]; then
+              cat > docker-compose.ports.yml <<'EOF'
+            services:
+            EOF
+              if [ -n "$BACKEND_PORT" ]; then
+                cat >> docker-compose.ports.yml <<'EOF'
+              backend:
+                ports:
+                  - "${BACKEND_PORT}:8000"
+            EOF
+              fi
+              if [ -n "$FRONTEND_PORT" ]; then
+                cat >> docker-compose.ports.yml <<'EOF'
+              frontend:
+                ports:
+                  - "${FRONTEND_PORT}:3000"
+            EOF
+              fi
+              COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ports.yml"
+            fi
+            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env $COMPOSE_FILES pull
+            docker compose -p "$APP_NAME-$DEPLOY_ENV_NAME" --env-file .env $COMPOSE_FILES up -d --wait --wait-timeout 90

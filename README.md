@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.10
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.10
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -56,11 +56,13 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.10
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
       acme-email: ${{ vars.ACME_EMAIL }}
+      prod-backend-upstream: ${{ vars.PROD_BACKEND_UPSTREAM }}
+      prod-frontend-upstream: ${{ vars.PROD_FRONTEND_UPSTREAM }}
     secrets:
       PROXY_HOST: ${{ secrets.PROXY_HOST }}
       PROXY_USER: ${{ secrets.PROXY_USER }}
@@ -75,6 +77,8 @@ jobs:
 
 For an app with no secret placeholders in its snippet, pass a fully rendered string as `snippet-content` instead.
 
+Templates can also use `DEV_BACKEND_UPSTREAM`, `DEV_FRONTEND_UPSTREAM`, `PROD_BACKEND_UPSTREAM`, and `PROD_FRONTEND_UPSTREAM`. If the corresponding inputs are omitted, they default to `<app-name>-dev-backend:8000`, `<app-name>-dev-frontend:3000`, `<app-name>-prod-backend:8000`, and `<app-name>-prod-frontend:3000`.
+
 ## App undeploy
 
 Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host. It can remove the app's Caddy snippet, validate/reload Caddy, then run `docker compose down` for one or more deployment environments. `remove-volumes` defaults to `false`; set it to `true` only when the database volume should be deleted too.
@@ -82,7 +86,7 @@ Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host
 ```yaml
 jobs:
   undeploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.1.10
     with:
       app-name: werewolf
       deploy-env-names: dev prod
@@ -106,7 +110,7 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.10
     with:
       app-name: werewolf
       deploy-env-name: prod
@@ -135,7 +139,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.10
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -145,6 +149,10 @@ jobs:
       caddy-snippet-template-path: deploy/caddy/service.caddy
       acme-email: ${{ vars.ACME_EMAIL }}
       prod-backup-prefix: werewolf-prod-before-${{ github.ref_name }}
+      prod-backend-upstream: ${{ vars.PROD_BACKEND_UPSTREAM }}
+      prod-frontend-upstream: ${{ vars.PROD_FRONTEND_UPSTREAM }}
+      prod-backend-port: ${{ vars.PROD_BACKEND_PORT }}
+      prod-frontend-port: ${{ vars.PROD_FRONTEND_PORT }}
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -164,6 +172,8 @@ jobs:
       BASIC_AUTH_ADMIN_HASH: ${{ secrets.BASIC_AUTH_ADMIN_HASH }}
 ```
 
+When `dev-backend-port`, `dev-frontend-port`, `prod-backend-port`, or `prod-frontend-port` are set, app deploy adds a small Compose override that publishes the corresponding backend/frontend container port on the app host. Leave them empty for same-host Caddy via the Docker `proxy` network.
+
 ## Minecraft pack release
 
 Use `.github/workflows/minecraft-pack-release.yml` from a pack repository to build `BP` and `RP`, publish a Minecraft-friendly `.mcaddon`, and publish a `.zip` whose contents are `*-BP.zip` and `*-RP.zip`.
@@ -178,7 +188,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.9
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.10
     permissions:
       contents: write
     with:

@@ -1,0 +1,195 @@
+name: App Prepare Next Host
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        required: true
+        type: string
+      image-prefix:
+        required: true
+        type: string
+      deploy-env-name:
+        required: true
+        type: string
+      image-tag:
+        required: true
+        type: string
+      restore-database:
+        required: true
+        type: boolean
+      confirm:
+        required: true
+        type: string
+      postgres-user:
+        required: true
+        type: string
+      postgres-db:
+        required: true
+        type: string
+      compose-path:
+        required: false
+        type: string
+        default: deploy/docker-compose.yml
+      backend-port:
+        required: false
+        type: string
+        default: ""
+      frontend-port:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      DEPLOY_HOST:
+        required: true
+      DEPLOY_USER:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      NEXT_DEPLOY_HOST:
+        required: true
+      NEXT_DEPLOY_USER:
+        required: true
+      NEXT_DEPLOY_SSH_KEY:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+      POSTGRES_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        env:
+          APP_NAME: ${{ inputs.app-name }}
+          CONFIRM: ${{ inputs.confirm }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+        run: |
+          set -eu
+          EXPECTED="prepare next host $APP_NAME"
+          if [ "$CONFIRM" != "$EXPECTED" ]; then
+            echo "confirm must be exactly: $EXPECTED" >&2
+            exit 1
+          fi
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "image-tag must not be empty." >&2
+            exit 1
+          fi
+
+  dump-current-db:
+    needs: validate-inputs
+    if: ${{ inputs.restore-database }}
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      DEPLOY_ENV_NAME: ${{ inputs.deploy-env-name }}
+      DB_USER: ${{ inputs.postgres-user }}
+      DB_NAME: ${{ inputs.postgres-db }}
+    steps:
+      - name: Set up current host SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_current
+          chmod 600 ~/.ssh/id_current
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Dump current database
+        run: |
+          set -eu
+          FILENAME="${APP_NAME}-${DEPLOY_ENV_NAME}-before-host-move-$(date +%Y%m%dT%H%M%SZ).dump"
+          ssh -i ~/.ssh/id_current -o StrictHostKeyChecking=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd /opt/$APP_NAME/$DEPLOY_ENV_NAME && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME exec -T postgres pg_dump -U $DB_USER -Fc $DB_NAME" > "$FILENAME"
+          echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
+          ls -lh "$FILENAME"
+
+      - name: Upload migration dump artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILENAME }}
+          path: ${{ env.FILENAME }}
+          retention-days: 30
+
+  deploy-next:
+    needs: [validate-inputs, dump-current-db]
+    if: ${{ always() && needs.validate-inputs.result == 'success' && (needs.dump-current-db.result == 'success' || needs.dump-current-db.result == 'skipped') }}
+    uses: ./.github/workflows/app-deploy.yml
+    with:
+      app-name: ${{ inputs.app-name }}
+      image-prefix: ${{ inputs.image-prefix }}
+      deploy-env-name: ${{ inputs.deploy-env-name }}
+      image-tag: ${{ inputs.image-tag }}
+      app-env: ${{ inputs.deploy-env-name }}
+      backend-port: ${{ inputs.backend-port }}
+      frontend-port: ${{ inputs.frontend-port }}
+      postgres-user: ${{ inputs.postgres-user }}
+      postgres-db: ${{ inputs.postgres-db }}
+      compose-path: ${{ inputs.compose-path }}
+    secrets:
+      DEPLOY_HOST: ${{ secrets.NEXT_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.NEXT_DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.NEXT_DEPLOY_SSH_KEY }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+  restore-next-db:
+    needs: [dump-current-db, deploy-next]
+    if: ${{ inputs.restore-database && needs.dump-current-db.result == 'success' && needs.deploy-next.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      DEPLOY_ENV_NAME: ${{ inputs.deploy-env-name }}
+      DB_USER: ${{ inputs.postgres-user }}
+      DB_NAME: ${{ inputs.postgres-db }}
+    steps:
+      - name: Download migration dump artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ inputs.app-name }}-${{ inputs.deploy-env-name }}-before-host-move-*.dump
+          merge-multiple: true
+
+      - name: Set up next host SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.NEXT_DEPLOY_SSH_KEY }}" > ~/.ssh/id_next
+          chmod 600 ~/.ssh/id_next
+          ssh-keyscan -H "${{ secrets.NEXT_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Restore database on next host
+        run: |
+          set -eu
+          DUMP_FILE="$(find . -maxdepth 1 -name "${APP_NAME}-${DEPLOY_ENV_NAME}-before-host-move-*.dump" | head -n 1)"
+          if [ -z "$DUMP_FILE" ]; then
+            echo "Migration dump artifact was not found." >&2
+            exit 1
+          fi
+          ssh -i ~/.ssh/id_next -o StrictHostKeyChecking=yes \
+            "${{ secrets.NEXT_DEPLOY_USER }}@${{ secrets.NEXT_DEPLOY_HOST }}" \
+            "cd /opt/$APP_NAME/$DEPLOY_ENV_NAME && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME stop backend frontend && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME exec -T postgres pg_restore -U $DB_USER -d $DB_NAME --clean --if-exists --no-owner && if [ -f docker-compose.ports.yml ]; then docker compose -p $APP_NAME-$DEPLOY_ENV_NAME -f docker-compose.yml -f docker-compose.ports.yml up -d --wait --wait-timeout 90; else docker compose -p $APP_NAME-$DEPLOY_ENV_NAME -f docker-compose.yml up -d --wait --wait-timeout 90; fi" < "$DUMP_FILE"
+
+  verify-next:
+    needs: [deploy-next, restore-next-db]
+    if: ${{ always() && needs.deploy-next.result == 'success' && (needs.restore-next-db.result == 'success' || needs.restore-next-db.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      DEPLOY_ENV_NAME: ${{ inputs.deploy-env-name }}
+    steps:
+      - name: Set up next host SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.NEXT_DEPLOY_SSH_KEY }}" > ~/.ssh/id_next
+          chmod 600 ~/.ssh/id_next
+          ssh-keyscan -H "${{ secrets.NEXT_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Verify app health on next host
+        run: |
+          set -eu
+          ssh -i ~/.ssh/id_next -o StrictHostKeyChecking=yes \
+            "${{ secrets.NEXT_DEPLOY_USER }}@${{ secrets.NEXT_DEPLOY_HOST }}" \
+            "cd /opt/$APP_NAME/$DEPLOY_ENV_NAME && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME exec -T backend wget -q -O - http://127.0.0.1:8000/api/health && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME exec -T backend wget -q -O - http://127.0.0.1:8000/api/health/db && docker compose -p $APP_NAME-$DEPLOY_ENV_NAME exec -T frontend wget -q -O - http://127.0.0.1:3000/ >/dev/null"

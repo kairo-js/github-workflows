@@ -108,8 +108,10 @@ jobs:
           FILENAME="${{ inputs.backup-prefix }}-$(date +%Y%m%dT%H%M%SZ).dump"
           if [ -n "${{ inputs.app-name }}" ] && [ -n "${{ inputs.deploy-env-name }}" ]; then
             if [ "${{ inputs.skip-if-missing }}" = "true" ]; then
+              # shellcheck disable=SC2016
               REMOTE_CMD='APP_DIR="/opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }}"; COMPOSE_PATH="${{ inputs.compose-path }}"; if [ ! -f "$APP_DIR/$COMPOSE_PATH" ]; then COMPOSE_BASENAME="${COMPOSE_PATH##*/}"; if [ -f "$APP_DIR/$COMPOSE_BASENAME" ]; then COMPOSE_PATH="$COMPOSE_BASENAME"; else exit 42; fi; fi; cd "$APP_DIR" && docker compose -p ${{ inputs.app-name }}-${{ inputs.deploy-env-name }} -f "$COMPOSE_PATH" exec -T postgres pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}'
             else
+              # shellcheck disable=SC2016
               REMOTE_CMD='APP_DIR="/opt/${{ inputs.app-name }}/${{ inputs.deploy-env-name }}"; COMPOSE_PATH="${{ inputs.compose-path }}"; if [ ! -f "$APP_DIR/$COMPOSE_PATH" ]; then COMPOSE_BASENAME="${COMPOSE_PATH##*/}"; if [ -f "$APP_DIR/$COMPOSE_BASENAME" ]; then COMPOSE_PATH="$COMPOSE_BASENAME"; else exit 1; fi; fi; cd "$APP_DIR" && docker compose -p ${{ inputs.app-name }}-${{ inputs.deploy-env-name }} -f "$COMPOSE_PATH" exec -T postgres pg_dump -U ${{ inputs.db-user }} -Fc ${{ inputs.db-name }}'
             fi
           elif [ -n "${{ inputs.container-name }}" ]; then

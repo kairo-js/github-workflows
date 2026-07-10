@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.1.9
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.1.9
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -48,7 +48,7 @@ jobs:
 The reverse proxy / TLS termination for every app sharing a host is a single, fully self-contained Caddy stack that `.github/workflows/caddy-snippet-deploy.yml` owns end-to-end — there is no separate "proxy" repo. Calling this workflow does two things, in order:
 
 1. **`deploy-proxy-body`**: idempotently ensures the shared `proxy-caddy` container is running on `PROXY_HOST` (creating the `proxy` docker network and `docker compose pull && up -d` if needed). The compose file and `Caddyfile` are generated inline inside the workflow — Caddy's own config never references any app by name, it just does `import /etc/caddy/conf.d/*.caddy` and joins the one generic `proxy` network. Safe to call from every app's deploy, every time; each app's own secrets (`PROXY_HOST`/`PROXY_USER`/`PROXY_SSH_KEY`) determine which host it lands on, so co-locating or splitting apps onto separate proxy hosts is just a matter of what each app repo's secrets point to — no shared file to edit either way.
-2. **`deploy-snippet`**: writes the calling app's own routing config to `/opt/proxy/conf.d/<app-name>.caddy` and reloads Caddy.
+2. **`deploy-snippet`**: writes the calling app's own routing config to `/opt/proxy/conf.d/<app-name>.caddy`, validates the full Caddy config, and reloads Caddy.
 
 For an app's containers to actually be reachable, they must join the `proxy` docker network (see "App deploy" above). If a snippet needs supported secret values substituted in, pass `snippet-template-path` and the corresponding secrets; the reusable workflow renders the file immediately before copying it, so rendered secrets do not have to pass through job outputs.
 
@@ -56,7 +56,7 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.1.9
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
@@ -75,6 +75,30 @@ jobs:
 
 For an app with no secret placeholders in its snippet, pass a fully rendered string as `snippet-content` instead.
 
+## App undeploy
+
+Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host. It can remove the app's Caddy snippet, validate/reload Caddy, then run `docker compose down` for one or more deployment environments. `remove-volumes` defaults to `false`; set it to `true` only when the database volume should be deleted too.
+
+```yaml
+jobs:
+  undeploy:
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.1.9
+    with:
+      app-name: werewolf
+      deploy-env-names: dev prod
+      remove-volumes: false
+      remove-app-dirs: true
+      remove-caddy-snippet: true
+      confirm: undeploy werewolf
+    secrets:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      PROXY_HOST: ${{ secrets.PROXY_HOST }}
+      PROXY_USER: ${{ secrets.PROXY_USER }}
+      PROXY_SSH_KEY: ${{ secrets.PROXY_SSH_KEY }}
+```
+
 ## PostgreSQL backup
 
 Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container running on a remote host over SSH, then upload the dump as both a workflow artifact and to Google Drive via `rclone`.
@@ -82,7 +106,7 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.1.9
     with:
       app-name: werewolf
       deploy-env-name: prod
@@ -111,7 +135,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.1.9
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -154,7 +178,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.8
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.1.9
     permissions:
       contents: write
     with:

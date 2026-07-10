@@ -1,0 +1,179 @@
+name: App Undeploy
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        description: Short app identifier, e.g. "werewolf".
+        required: true
+        type: string
+      deploy-env-names:
+        description: Space-separated deployment environment names to remove, e.g. "dev prod".
+        required: true
+        type: string
+      compose-path:
+        description: Path to docker-compose.yml relative to /opt/<app-name>/<deploy-env-name>.
+        required: false
+        type: string
+        default: docker-compose.yml
+      remove-volumes:
+        description: Whether to remove Docker Compose volumes with down -v.
+        required: false
+        type: boolean
+        default: false
+      remove-app-dirs:
+        description: Whether to remove /opt/<app-name>/<deploy-env-name> directories after compose down.
+        required: false
+        type: boolean
+        default: true
+      remove-caddy-snippet:
+        description: Whether to remove <remote-dir>/<app-name>.caddy and reload Caddy.
+        required: false
+        type: boolean
+        default: true
+      confirm:
+        description: Must be exactly "undeploy <app-name>".
+        required: true
+        type: string
+      remote-dir:
+        description: Host directory containing Caddy snippets.
+        required: false
+        type: string
+        default: /opt/proxy/conf.d
+      caddy-container:
+        description: Name of the Caddy container.
+        required: false
+        type: string
+        default: proxy-caddy
+      caddyfile-path:
+        description: Path to the main Caddyfile as seen from inside the Caddy container.
+        required: false
+        type: string
+        default: /etc/caddy/Caddyfile
+    secrets:
+      DEPLOY_HOST:
+        required: true
+      DEPLOY_USER:
+        required: true
+      DEPLOY_SSH_KEY:
+        required: true
+      PROXY_HOST:
+        required: true
+      PROXY_USER:
+        required: true
+      PROXY_SSH_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation and environment names
+        env:
+          APP_NAME: ${{ inputs.app-name }}
+          DEPLOY_ENV_NAMES: ${{ inputs.deploy-env-names }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -eu
+          EXPECTED="undeploy $APP_NAME"
+          if [ "$CONFIRM" != "$EXPECTED" ]; then
+            echo "confirm must be exactly: $EXPECTED" >&2
+            exit 1
+          fi
+          case "$APP_NAME" in
+            *[!A-Za-z0-9_-]*)
+              echo "Invalid app name: $APP_NAME" >&2
+              exit 1
+              ;;
+          esac
+          if [ -z "$DEPLOY_ENV_NAMES" ]; then
+            echo "deploy-env-names must not be empty." >&2
+            exit 1
+          fi
+          for DEPLOY_ENV_NAME in $DEPLOY_ENV_NAMES; do
+            case "$DEPLOY_ENV_NAME" in
+              *[!A-Za-z0-9_-]*)
+                echo "Invalid deploy environment name: $DEPLOY_ENV_NAME" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+  remove-caddy-snippet:
+    needs: validate-inputs
+    if: ${{ inputs.remove-caddy-snippet }}
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      REMOTE_DIR: ${{ inputs.remote-dir }}
+      CADDY_CONTAINER: ${{ inputs.caddy-container }}
+      CADDYFILE_PATH: ${{ inputs.caddyfile-path }}
+    steps:
+      - name: Remove Caddy snippet, validate, and reload
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          envs: APP_NAME,REMOTE_DIR,CADDY_CONTAINER,CADDYFILE_PATH
+          script: |
+            set -eu
+            SNIPPET="$REMOTE_DIR/$APP_NAME.caddy"
+            BACKUP="$SNIPPET.undeploy-backup"
+            mkdir -p "$REMOTE_DIR"
+            if [ -f "$SNIPPET" ]; then
+              cp "$SNIPPET" "$BACKUP"
+              rm -f "$SNIPPET"
+            else
+              rm -f "$BACKUP"
+            fi
+            if ! docker exec "$CADDY_CONTAINER" caddy validate --config "$CADDYFILE_PATH"; then
+              if [ -f "$BACKUP" ]; then
+                mv "$BACKUP" "$SNIPPET"
+                docker exec "$CADDY_CONTAINER" caddy reload --config "$CADDYFILE_PATH" || true
+              fi
+              exit 1
+            fi
+            docker exec "$CADDY_CONTAINER" caddy reload --config "$CADDYFILE_PATH"
+            rm -f "$BACKUP"
+
+  undeploy-app:
+    needs: [validate-inputs, remove-caddy-snippet]
+    if: ${{ always() && needs.validate-inputs.result == 'success' && (needs.remove-caddy-snippet.result == 'success' || needs.remove-caddy-snippet.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: ${{ inputs.app-name }}
+      DEPLOY_ENV_NAMES: ${{ inputs.deploy-env-names }}
+      COMPOSE_PATH: ${{ inputs.compose-path }}
+      REMOVE_VOLUMES: ${{ inputs.remove-volumes }}
+      REMOVE_APP_DIRS: ${{ inputs.remove-app-dirs }}
+    steps:
+      - name: Stop and remove app stacks
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: APP_NAME,DEPLOY_ENV_NAMES,COMPOSE_PATH,REMOVE_VOLUMES,REMOVE_APP_DIRS
+          script: |
+            set -eu
+            for DEPLOY_ENV_NAME in $DEPLOY_ENV_NAMES; do
+              DIR="/opt/$APP_NAME/$DEPLOY_ENV_NAME"
+              PROJECT="$APP_NAME-$DEPLOY_ENV_NAME"
+              if [ -f "$DIR/$COMPOSE_PATH" ]; then
+                cd "$DIR"
+                if [ "$REMOVE_VOLUMES" = "true" ]; then
+                  docker compose -p "$PROJECT" -f "$COMPOSE_PATH" down -v --remove-orphans
+                else
+                  docker compose -p "$PROJECT" -f "$COMPOSE_PATH" down --remove-orphans
+                fi
+              else
+                echo "Compose file not found for $PROJECT at $DIR/$COMPOSE_PATH; skipping compose down."
+              fi
+              if [ "$REMOVE_APP_DIRS" = "true" ]; then
+                rm -rf "$DIR"
+              fi
+            done

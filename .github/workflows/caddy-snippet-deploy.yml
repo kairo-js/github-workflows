@@ -151,6 +151,26 @@ jobs:
           import /etc/caddy/conf.d/*.caddy
           EOF
 
+      - name: Prepare proxy directory
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROXY_HOST }}
+          username: ${{ secrets.PROXY_USER }}
+          key: ${{ secrets.PROXY_SSH_KEY }}
+          script: |
+            set -eu
+            DIR="/opt/proxy"
+            if mkdir -p "$DIR/conf.d" 2>/dev/null; then
+              exit 0
+            fi
+            if command -v sudo >/dev/null 2>&1; then
+              sudo -n mkdir -p "$DIR/conf.d"
+              sudo -n chown -R "$(id -un):$(id -gn)" "$DIR"
+              exit 0
+            fi
+            echo "Failed to create $DIR. Create it on the server or allow passwordless sudo for deploy bootstrap." >&2
+            exit 1
+
       - name: Copy proxy body to proxy host
         uses: appleboy/scp-action@v0.1.7
         with:

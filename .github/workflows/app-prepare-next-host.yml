@@ -118,7 +118,7 @@ jobs:
   deploy-next:
     needs: [validate-inputs, dump-current-db]
     if: ${{ always() && needs.validate-inputs.result == 'success' && (needs.dump-current-db.result == 'success' || needs.dump-current-db.result == 'skipped') }}
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.4
     with:
       app-name: ${{ inputs.app-name }}
       image-prefix: ${{ inputs.image-prefix }}

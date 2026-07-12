@@ -9,7 +9,7 @@ Use `.github/workflows/docker-build-push.yml` to build and push one or more Dock
 ```yaml
 jobs:
   build-and-push:
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.2.4
     with:
       services: '[{"name":"backend","context":"./backend"},{"name":"frontend","context":"./frontend"}]'
       image-prefix: mc-werewolf
@@ -26,7 +26,7 @@ Use `.github/workflows/app-deploy.yml` to write a `.env` file and `docker compos
 ```yaml
 jobs:
   deploy:
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.4
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -44,6 +44,8 @@ jobs:
       POSTGRES_PASSWORD: ${{ needs.vars.outputs.deploy-env-name == 'prod' && secrets.PROD_POSTGRES_PASSWORD || secrets.DEV_POSTGRES_PASSWORD }}
       GOOGLE_CLIENT_ID: ${{ secrets.DEV_GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.DEV_GOOGLE_CLIENT_SECRET }}
+      GITHUB_CLIENT_ID: ${{ secrets.DEV_GITHUB_CLIENT_ID }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.DEV_GITHUB_CLIENT_SECRET }}
 ```
 
 ## Caddy snippet deploy
@@ -59,7 +61,7 @@ For an app's containers to actually be reachable, they must join the `proxy` doc
 jobs:
   deploy-caddy:
     needs: deploy
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.4
     with:
       app-name: werewolf
       snippet-template-path: deploy/caddy/service.caddy
@@ -90,7 +92,7 @@ Use `.github/workflows/app-undeploy.yml` to manually withdraw an app from a host
 jobs:
   undeploy-dev:
     if: ${{ inputs.target == 'all' || inputs.target == 'dev' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.4
     with:
       app-name: werewolf
       deploy-env-names: dev
@@ -108,7 +110,7 @@ jobs:
 
   undeploy-prod:
     if: ${{ inputs.target == 'all' || inputs.target == 'prod' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/app-undeploy.yml@v0.2.4
     with:
       app-name: werewolf
       deploy-env-names: prod
@@ -134,7 +136,7 @@ Use `.github/workflows/postgres-backup.yml` to `pg_dump` a PostgreSQL container 
 ```yaml
 jobs:
   backup:
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.2.4
     with:
       app-name: werewolf
       deploy-env-name: prod
@@ -163,7 +165,7 @@ Use `.github/workflows/web-app-release.yml` when an app should use the standard 
 ```yaml
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/web-app-release.yml@v0.2.4
     with:
       app-name: werewolf
       image-prefix: mc-werewolf
@@ -203,6 +205,10 @@ jobs:
       DEV_GOOGLE_CLIENT_SECRET: ${{ secrets.DEV_GOOGLE_CLIENT_SECRET }}
       PROD_GOOGLE_CLIENT_ID: ${{ secrets.PROD_GOOGLE_CLIENT_ID }}
       PROD_GOOGLE_CLIENT_SECRET: ${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}
+      DEV_GITHUB_CLIENT_ID: ${{ secrets.DEV_GITHUB_CLIENT_ID }}
+      DEV_GITHUB_CLIENT_SECRET: ${{ secrets.DEV_GITHUB_CLIENT_SECRET }}
+      PROD_GITHUB_CLIENT_ID: ${{ secrets.PROD_GITHUB_CLIENT_ID }}
+      PROD_GITHUB_CLIENT_SECRET: ${{ secrets.PROD_GITHUB_CLIENT_SECRET }}
 ```
 
 `DEV_DEPLOY_*` and `PROD_DEPLOY_*` are separate secrets so dev and prod can live on different hosts. To keep them co-located on one host instead, just set both triples to the same `HOST`/`USER`/`SSH_KEY` values -- `app-deploy.yml`'s `/opt/<app-name>/<deploy-env-name>` directory and `<app-name>-<deploy-env-name>` compose project naming already avoid collisions either way.
@@ -223,7 +229,7 @@ on:
 
 jobs:
   release:
-    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.2.3
+    uses: kairo-js/github-workflows/.github/workflows/minecraft-pack-release.yml@v0.2.4
     permissions:
       contents: write
     with:

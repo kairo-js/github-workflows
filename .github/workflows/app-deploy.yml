@@ -27,6 +27,11 @@ on:
         description: Value passed to the app as APP_ENV.
         required: true
         type: string
+      public-url:
+        description: Public origin used by the app for absolute URLs and OAuth callbacks.
+        required: false
+        type: string
+        default: ""
       backend-port:
         required: false
         type: string
@@ -67,6 +72,10 @@ on:
         required: true
       POSTGRES_PASSWORD:
         required: true
+      GOOGLE_CLIENT_ID:
+        required: false
+      GOOGLE_CLIENT_SECRET:
+        required: false
 
 permissions:
   contents: read
@@ -80,6 +89,7 @@ jobs:
       DEPLOY_ENV_NAME: ${{ inputs.deploy-env-name }}
       IMAGE_TAG: ${{ inputs.image-tag }}
       APP_ENV: ${{ inputs.app-env }}
+      PUBLIC_URL: ${{ inputs.public-url }}
       BACKEND_PORT: ${{ inputs.backend-port }}
       FRONTEND_PORT: ${{ inputs.frontend-port }}
       POSTGRES_PORT: ${{ inputs.postgres-port }}
@@ -87,6 +97,8 @@ jobs:
       POSTGRES_USER: ${{ inputs.postgres-user }}
       POSTGRES_DB: ${{ inputs.postgres-db }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v7
 
@@ -127,7 +139,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: APP_NAME,IMAGE_PREFIX,DEPLOY_ENV_NAME,IMAGE_TAG,APP_ENV,BACKEND_PORT,FRONTEND_PORT,POSTGRES_PORT,DOCKERHUB_USERNAME,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD
+          envs: APP_NAME,IMAGE_PREFIX,DEPLOY_ENV_NAME,IMAGE_TAG,APP_ENV,PUBLIC_URL,BACKEND_PORT,FRONTEND_PORT,POSTGRES_PORT,DOCKERHUB_USERNAME,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET
           script: |
             set -eu
             DIR="/opt/$APP_NAME/$DEPLOY_ENV_NAME"
@@ -139,12 +151,15 @@ jobs:
             DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
             IMAGE_TAG=$IMAGE_TAG
             APP_ENV=$APP_ENV
+            PUBLIC_URL=$PUBLIC_URL
             BACKEND_PORT=$BACKEND_PORT
             FRONTEND_PORT=$FRONTEND_PORT
             POSTGRES_PORT=$POSTGRES_PORT
             POSTGRES_USER=$POSTGRES_USER
             POSTGRES_DB=$POSTGRES_DB
             POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+            GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+            GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
             EOF
             docker network create proxy 2>/dev/null || true
             cd "$DIR"

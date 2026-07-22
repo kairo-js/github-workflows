@@ -61,6 +61,18 @@ on:
         required: false
         type: string
         default: deploy/docker-compose.yml
+      storage-driver:
+        required: false
+        type: string
+        default: ""
+      r2-endpoint:
+        required: false
+        type: string
+        default: ""
+      r2-bucket:
+        required: false
+        type: string
+        default: ""
     secrets:
       DEPLOY_HOST:
         required: true
@@ -79,6 +91,10 @@ on:
       GITHUB_CLIENT_ID:
         required: false
       GITHUB_CLIENT_SECRET:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
         required: false
 
 permissions:
@@ -105,6 +121,11 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
       GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
+      STORAGE_DRIVER: ${{ inputs.storage-driver }}
+      R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+      R2_BUCKET: ${{ inputs.r2-bucket }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
 
@@ -145,7 +166,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: APP_NAME,IMAGE_PREFIX,DEPLOY_ENV_NAME,IMAGE_TAG,APP_ENV,PUBLIC_URL,BACKEND_PORT,FRONTEND_PORT,POSTGRES_PORT,DOCKERHUB_USERNAME,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET
+          envs: APP_NAME,IMAGE_PREFIX,DEPLOY_ENV_NAME,IMAGE_TAG,APP_ENV,PUBLIC_URL,BACKEND_PORT,FRONTEND_PORT,POSTGRES_PORT,DOCKERHUB_USERNAME,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GITHUB_CLIENT_ID,GITHUB_CLIENT_SECRET,STORAGE_DRIVER,R2_ENDPOINT,R2_BUCKET,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY
           script: |
             set -eu
             DIR="/opt/$APP_NAME/$DEPLOY_ENV_NAME"
@@ -168,6 +189,11 @@ jobs:
             GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
             GITHUB_CLIENT_ID=$GITHUB_CLIENT_ID
             GITHUB_CLIENT_SECRET=$GITHUB_CLIENT_SECRET
+            STORAGE_DRIVER=$STORAGE_DRIVER
+            R2_ENDPOINT=$R2_ENDPOINT
+            R2_BUCKET=$R2_BUCKET
+            R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID
+            R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY
             EOF
             docker network create proxy 2>/dev/null || true
             cd "$DIR"

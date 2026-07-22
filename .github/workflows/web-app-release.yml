@@ -80,6 +80,30 @@ on:
         required: false
         type: string
         default: ""
+      dev-storage-driver:
+        required: false
+        type: string
+        default: ""
+      prod-storage-driver:
+        required: false
+        type: string
+        default: ""
+      dev-r2-endpoint:
+        required: false
+        type: string
+        default: ""
+      prod-r2-endpoint:
+        required: false
+        type: string
+        default: ""
+      dev-r2-bucket:
+        required: false
+        type: string
+        default: ""
+      prod-r2-bucket:
+        required: false
+        type: string
+        default: ""
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -135,6 +159,14 @@ on:
         required: false
       PROD_GITHUB_CLIENT_SECRET:
         required: false
+      DEV_R2_ACCESS_KEY_ID:
+        required: false
+      DEV_R2_SECRET_ACCESS_KEY:
+        required: false
+      PROD_R2_ACCESS_KEY_ID:
+        required: false
+      PROD_R2_SECRET_ACCESS_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -159,7 +191,7 @@ jobs:
 
   build-and-push:
     needs: vars
-    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/docker-build-push.yml@v0.2.5
     with:
       services: ${{ inputs.services }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -171,7 +203,7 @@ jobs:
   pre-prod-backup:
     needs: [vars, build-and-push]
     if: ${{ needs.vars.outputs.deploy-env-name == 'prod' }}
-    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/postgres-backup.yml@v0.2.5
     with:
       app-name: ${{ inputs.app-name }}
       deploy-env-name: prod
@@ -191,7 +223,7 @@ jobs:
   deploy-dev:
     needs: [vars, build-and-push]
     if: ${{ needs.vars.outputs.deploy-env-name == 'dev' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.5
     with:
       app-name: ${{ inputs.app-name }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -204,6 +236,9 @@ jobs:
       postgres-user: ${{ inputs.postgres-user }}
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
+      storage-driver: ${{ inputs.dev-storage-driver }}
+      r2-endpoint: ${{ inputs.dev-r2-endpoint }}
+      r2-bucket: ${{ inputs.dev-r2-bucket }}
     secrets:
       DEPLOY_HOST: ${{ secrets.DEV_DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEV_DEPLOY_USER }}
@@ -214,11 +249,13 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.DEV_GOOGLE_CLIENT_SECRET }}
       GITHUB_CLIENT_ID: ${{ secrets.DEV_GITHUB_CLIENT_ID }}
       GITHUB_CLIENT_SECRET: ${{ secrets.DEV_GITHUB_CLIENT_SECRET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.DEV_R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.DEV_R2_SECRET_ACCESS_KEY }}
 
   deploy-prod:
     needs: [vars, build-and-push, pre-prod-backup]
     if: ${{ needs.vars.outputs.deploy-env-name == 'prod' && needs.pre-prod-backup.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/app-deploy.yml@v0.2.5
     with:
       app-name: ${{ inputs.app-name }}
       image-prefix: ${{ inputs.image-prefix }}
@@ -231,6 +268,9 @@ jobs:
       postgres-user: ${{ inputs.postgres-user }}
       postgres-db: ${{ inputs.postgres-db }}
       compose-path: ${{ inputs.compose-path }}
+      storage-driver: ${{ inputs.prod-storage-driver }}
+      r2-endpoint: ${{ inputs.prod-r2-endpoint }}
+      r2-bucket: ${{ inputs.prod-r2-bucket }}
     secrets:
       DEPLOY_HOST: ${{ secrets.PROD_DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.PROD_DEPLOY_USER }}
@@ -241,11 +281,13 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}
       GITHUB_CLIENT_ID: ${{ secrets.PROD_GITHUB_CLIENT_ID }}
       GITHUB_CLIENT_SECRET: ${{ secrets.PROD_GITHUB_CLIENT_SECRET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.PROD_R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.PROD_R2_SECRET_ACCESS_KEY }}
 
   deploy-caddy-dev:
     needs: deploy-dev
     if: ${{ needs.deploy-dev.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.5
     with:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}
@@ -266,7 +308,7 @@ jobs:
   deploy-caddy-prod:
     needs: deploy-prod
     if: ${{ needs.deploy-prod.result == 'success' }}
-    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.4
+    uses: kairo-js/github-workflows/.github/workflows/caddy-snippet-deploy.yml@v0.2.5
     with:
       app-name: ${{ inputs.app-name }}
       snippet-template-path: ${{ inputs.caddy-snippet-template-path }}
